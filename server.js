@@ -3,7 +3,8 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const authRoutes = require("./routes/auth");
-const productRoutes = require("./routes/products"); // 1. IMPORTED PRODUCT ROUTE MODULE
+const productRoutes = require("./routes/products");
+const cartRoutes = require("./routes/cart"); // 1. IMPORT CART ROUTE
 
 const app = express();
 
@@ -21,15 +22,12 @@ mongoose
 // REGISTERED ENDPOINT ROUTER ROUTINGS
 // ==========================================
 app.use("/api/auth", authRoutes);
-app.use("/api/products", productRoutes); // 2. LINKED PRODUCTS TO /api/products PATHWAY
+app.use("/api/products", productRoutes);
+app.use("/api/cart", cartRoutes); // 2. LINKED CARTS TO /api/cart PATHWAY
 
-// Basic Status Route (Fixed parameters)
 app.get("/", (req, res) => {
   res.json({ message: "RADI API Operational" });
 });
 
-// ==========================================
-// SERVER INITIALIZATION EXECUTION
-// ==========================================
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server executing on port ${PORT}`));

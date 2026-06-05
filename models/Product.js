@@ -9,16 +9,25 @@ const ProductSchema = new mongoose.Schema(
     currentInventory: { type: Number, required: true },
     sku: { type: String, required: true, unique: true },
 
-    // Categorization requirements
     productType: {
       type: String,
       required: true,
       enum: ["Apparel", "Carry", "Tableware", "Outerwear"],
     },
-    materials: [{ type: String }], // e.g., ['Virgin Wool', 'Silk Lining']
-    colors: [{ type: String }], // Hex codes or names: ['#000000', '#FFFFFF']
 
-    images: [{ type: String }], // Array of image asset URLs
+    categoryTag: {
+      type: String,
+      required: true,
+      enum: ["new arrivals", "best sellers", "none"],
+      default: "none",
+    },
+
+    materials: [{ type: String }],
+    colors: [{ type: String }],
+    sizes: [{ type: String }],
+
+    // Changed to accept raw Base64 data strings directly inside the database document
+    images: [{ type: String }],
     isPubliclyVisible: { type: Boolean, default: false },
   },
   { timestamps: true },

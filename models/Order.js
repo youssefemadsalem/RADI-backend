@@ -21,7 +21,8 @@ const OrderSchema = new mongoose.Schema({
     price: Number,
     quantity: Number,
     selectedSize: String,
-    selectedColor: String
+    selectedColor: String ,
+    image: String
   }],
   subtotal: Number,
   shippingCost: { type: Number, default: 100 },

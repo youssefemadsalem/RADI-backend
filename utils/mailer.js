@@ -1,30 +1,57 @@
 const nodemailer = require('nodemailer');
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.SYSTEM_EMAIL_USER,
-    pass: process.env.SYSTEM_EMAIL_PASSWORD
+// Define a placeholder variable for the transporter instance
+let transporter;
+
+// Helper function to guarantee environment variables are fully initialized
+const getTransporter = () => {
+  if (!transporter) {
+    const user = process.env.SYSTEM_EMAIL_USER || process.env.EMAIL_USER;
+    const pass = process.env.SYSTEM_EMAIL_PASSWORD || process.env.EMAIL_PASS;
+
+    if (!user || !pass) {
+      throw new Error('[SMTP Engine Failure] Environment credentials are missing or uninitialized.');
+    }
+
+    transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user, pass }
+    });
   }
-});
+  return transporter;
+};
 
 const sendOrderEmailNotifications = async (order, imageAttachmentPath = null) => {
   try {
     const { orderCode, customerDetails, items, subtotal, shippingCost, total, paymentMethod } = order;
 
-    // 1. Generate the HTML table rows for the items (including product thumbnail images)
+    // Initialize the transporter safely at execution time
+    const mailEngine = getTransporter();
+
+    // 1. Safe Image Extraction & Base64 Fallback Engine
     const itemsHtml = items.map(item => {
-      // Use the Base64 image string directly if available, or fall back to an empty spacer
-      const productImgSrc = item.image || ''; 
+      let productImgSrc = item.image || item.imageUrl || item.screenshotUrl || ''; 
+      
+      if (productImgSrc && !productImgSrc.startsWith('http') && !productImgSrc.startsWith('data:image')) {
+        const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+        const cleanPath = productImgSrc.startsWith('/') ? productImgSrc : `/${productImgSrc}`;
+        productImgSrc = `${baseUrl}${cleanPath}`;
+      }
       
       return `
         <tr>
           <td style="padding: 12px 8px; border-bottom: 1px solid #eee; text-align: center; width: 60px;">
-            ${productImgSrc ? `<img src="${productImgSrc}" alt="${item.name}" style="width: 50px; height: auto; border: 1px solid #eee; display: block; margin: 0 auto;" />` : '[No Image]'}
+            ${productImgSrc ? `
+              <img src="${productImgSrc}" alt="${item.name}" style="width: 50px; height: auto; border: 1px solid #eee; display: block; margin: 0 auto; border-radius: 2px;" />
+            ` : `
+              <span style="font-size: 10px; color: #999; display:block; text-align:center;">No Image</span>
+            `}
           </td>
           <td style="padding: 12px 8px; border-bottom: 1px solid #eee; font-size: 12px; color: #171717;">
             <strong>${item.name}</strong><br />
-            <span style="color: #666; font-size: 11px; text-transform: uppercase;">Color: ${item.selectedColor} / Size: ${item.selectedSize}</span>
+            <span style="color: #666; font-size: 11px; text-transform: uppercase;">
+              Color: ${item.selectedColor || item.color || 'OS'} / Size: ${item.selectedSize || item.size || 'OS'}
+            </span>
           </td>
           <td style="padding: 12px 8px; border-bottom: 1px solid #eee; font-size: 12px; color: #171717;" align="center">x${item.quantity}</td>
           <td style="padding: 12px 8px; border-bottom: 1px solid #eee; font-size: 12px; font-family: monospace; color: #171717;" align="right">E£${item.price}.00</td>
@@ -32,7 +59,7 @@ const sendOrderEmailNotifications = async (order, imageAttachmentPath = null) =>
       `;
     }).join('');
 
-    // 2. Core Template applied to both client and admin emails
+    // 2. Core Invoice Template Design Layout
     const coreTemplate = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #171717; background-color: #ffffff; padding: 20px; border: 1px solid #eee;">
         <h2 style="font-family: serif; border-bottom: 2px solid #000; padding-bottom: 15px; text-align: center; letter-spacing: 4px; margin-top: 0;">RADI ARCHIVE</h2>
@@ -71,7 +98,13 @@ const sendOrderEmailNotifications = async (order, imageAttachmentPath = null) =>
       </div>
     `;
 
-    // 3. Build Mariam's Administration Specific Details Panel (Address & Contact Number)
+    // 3. Dynamic Fallback Safe Address Parser
+    const shippingStreet = customerDetails.address || (customerDetails.shippingAddress && customerDetails.shippingAddress.address) || '';
+    const shippingCity = customerDetails.city || (customerDetails.shippingAddress && customerDetails.shippingAddress.city) || '';
+    const shippingGov = customerDetails.governorate || (customerDetails.shippingAddress && customerDetails.shippingAddress.governorate) || '';
+    const shippingApartment = customerDetails.apartment || (customerDetails.shippingAddress && customerDetails.shippingAddress.apartment) || '';
+    const shippingZip = customerDetails.postalCode || (customerDetails.shippingAddress && customerDetails.shippingAddress.postalCode) || '';
+
     const adminDetailsPanel = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto 15px auto; padding: 20px; background-color: #f9f9f9; border: 1px solid #e5e5e5; color: #171717;">
         <h3 style="margin-top: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #000; border-bottom: 1px solid #ddd; padding-bottom: 8px;">
@@ -93,20 +126,20 @@ const sendOrderEmailNotifications = async (order, imageAttachmentPath = null) =>
           <tr style="vertical-align: top;">
             <td style="font-weight: bold; color: #666; padding-top: 5px;">Shipping Address:</td>
             <td style="padding-top: 5px; background: #fff; padding: 8px; border: 1px solid #eee; border-radius: 4px;">
-              ${customerDetails.shippingAddress.address}<br />
-              ${customerDetails.shippingAddress.apartment ? `Apartment/Suite: ${customerDetails.shippingAddress.apartment}<br />` : ''}
-              City: ${customerDetails.shippingAddress.city}<br />
-              Governorate: <strong>${customerDetails.shippingAddress.governorate}</strong>
-              ${customerDetails.shippingAddress.postalCode ? `<br />Postal Code: ${customerDetails.shippingAddress.postalCode}` : ''}
+              ${shippingStreet}<br />
+              ${shippingApartment ? `Apartment/Suite: ${shippingApartment}<br />` : ''}
+              City: ${shippingCity}<br />
+              Governorate: <strong>${shippingGov}</strong>
+              ${shippingZip ? `<br />Postal Code: ${shippingZip}` : ''}
             </td>
           </tr>
         </table>
       </div>
     `;
 
-    // 📩 DESPATCH EMAIL 1: Target Client Inbox
-    await transporter.sendMail({
-      from: `"RADI Archive Store" <${process.env.SYSTEM_EMAIL_USER}>`,
+  
+    await mailEngine.sendMail({
+      from: `"RADI Archive Store" <${process.env.SYSTEM_EMAIL_USER || process.env.EMAIL_USER}>`,
       to: customerDetails.email,
       subject: `Order Logged Successfully - ${orderCode}`,
       html: `
@@ -120,9 +153,9 @@ const sendOrderEmailNotifications = async (order, imageAttachmentPath = null) =>
       `
     });
 
-    // 📩 DESPATCH EMAIL 2: Target Administration Pipeline (Mariam)
-    await transporter.sendMail({
-      from: `"Fulfillment Dispatch System" <${process.env.SYSTEM_EMAIL_USER}>`,
+   
+    await mailEngine.sendMail({
+      from: `"Fulfillment Dispatch System" <${process.env.SYSTEM_EMAIL_USER || process.env.EMAIL_USER}>`,
       to: 'Mariammrradi@gmail.com',
       subject: `⚠️ ACTION REQUIRED: New Order Invoice [${orderCode}]`,
       html: `
@@ -134,7 +167,6 @@ const sendOrderEmailNotifications = async (order, imageAttachmentPath = null) =>
           ${coreTemplate}
         </div>
       `,
-      // Attach the receipt screenshot if paymentMethod is INSTAPAY
       attachments: imageAttachmentPath ? [{ filename: `receipt_${orderCode}.png`, path: imageAttachmentPath }] : []
     });
 

@@ -4,7 +4,8 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const authRoutes = require("./routes/auth");
 const productRoutes = require("./routes/products");
-const cartRoutes = require("./routes/cart"); // 1. IMPORT CART ROUTE
+const cartRoutes = require("./routes/cart"); 
+const orderRoutes = require("./routes/orders"); // ✅ 1. IMPORT ORDERS ROUTE (Verify file name matches)
 
 const app = express();
 
@@ -23,7 +24,8 @@ mongoose
 // ==========================================
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
-app.use("/api/cart", cartRoutes); // 2. LINKED CARTS TO /api/cart PATHWAY
+app.use("/api/cart", cartRoutes); 
+app.use("/api/orders", orderRoutes); // ✅ 2. LINK ORDERS TO /api/orders PATHWAY
 
 app.get("/", (req, res) => {
   res.json({ message: "RADI API Operational" });

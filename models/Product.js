@@ -1,3 +1,4 @@
+
 const mongoose = require("mongoose");
 
 const ProductSchema = new mongoose.Schema(
@@ -25,10 +26,17 @@ const ProductSchema = new mongoose.Schema(
     materials: [{ type: String }],
     colors: [{ type: String }],
     sizes: [{ type: String }],
-
-    // Changed to accept raw Base64 data strings directly inside the database document
     images: [{ type: String }],
     isPubliclyVisible: { type: Boolean, default: false },
+
+    // ADDED: Outfit lookbook schemas for the "Day to Night" feature
+    outfits: [
+      {
+        time: { type: String },    // e.g., "06:00 AM"
+        period: { type: String },  // e.g., "Morning"
+        imageUrl: { type: String } // Base64 or URL path string
+      }
+    ]
   },
   { timestamps: true },
 );

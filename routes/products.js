@@ -33,8 +33,7 @@ router.get("/", async (req, res) => {
         lowerFilter === "bag" ||
         lowerFilter === "carry"
       ) {
-        // FALLBACK OPTIMIZATION: Since your seeded folder contains strictly premium artisan bags,
-        // we display items where tag is "none" or productType is "Carry" to populate the third shelf seamlessly!
+        // FALLBACK OPTIMIZATION: Display items where tag is "none" or productType is "Carry"
         queryCondition.$or = [
           { categoryTag: "none" },
           { productType: "Carry" },
@@ -54,7 +53,40 @@ router.get("/", async (req, res) => {
 });
 
 // ==========================================================
-// 2. AUTOMATED 9-IMAGE SEEDING ENDPOINT
+// 🌟 2. NEWLY ADDED: FETCH SINGLE PRODUCT DETAILS BY ID
+// ==========================================================
+router.get("/:id", async (req, res) => {
+  try {
+    // Queries MongoDB for a single document matching the dynamic hex string ID
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "The requested silhouette form does not exist in the archive.",
+      });
+    }
+
+    res.json(product);
+  } catch (error) {
+    // Gracefully handle malformed hex tokens or casting errors
+    if (error.kind === "ObjectId") {
+      return res.status(400).json({
+        success: false,
+        message: "Malformed or invalid archive object identity structure.",
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Internal tracking server exception encountered.",
+      error: error.message,
+    });
+  }
+});
+
+// ==========================================================
+// 3. AUTOMATED 9-IMAGE SEEDING ENDPOINT
 // ==========================================================
 router.post("/seed", async (req, res) => {
   try {
@@ -124,7 +156,7 @@ router.post("/seed", async (req, res) => {
         initialInventory: 25,
         currentInventory: Math.floor(Math.random() * 20) + 5,
         sku: `RAD-BAG-${displayIndex.toString().padStart(2, "0")}-${selectedColor.replace("#", "")}`,
-        productType: "Carry", // Matches your schema's strict Enum validation rule safely
+        productType: "Carry", 
         categoryTag: targetCategory,
         materials: selectedMaterials,
         colors: [selectedColor],

@@ -5,7 +5,7 @@ const cors = require("cors");
 const authRoutes = require("./routes/auth");
 const productRoutes = require("./routes/products");
 const cartRoutes = require("./routes/cart"); 
-const orderRoutes = require("./routes/orders"); // ✅ 1. IMPORT ORDERS ROUTE (Verify file name matches)
+const orderRoutes = require("./routes/orders"); 
 
 const app = express();
 

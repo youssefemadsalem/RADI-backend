@@ -21,16 +21,18 @@ const getTransporter = () => {
   return transporter;
 };
 
-const sendOrderEmailNotifications = async (order, imageAttachmentPath = null) => {
+const sendOrderEmailNotifications = async (orderDocument, imageAttachmentPath = null) => {
   try {
+    // 🌟 FIXED: Convert Mongoose hydrated documents into raw JS structures to prevent object mapping breaks
+    const order = typeof orderDocument.toObject === 'function' ? orderDocument.toObject() : orderDocument;
     const { orderCode, customerDetails, items, subtotal, shippingCost, total, paymentMethod } = order;
 
     // Initialize the transporter safely at execution time
     const mailEngine = getTransporter();
 
     // 1. Safe Image Extraction & Base64 Fallback Engine
-    const itemsHtml = items.map(item => {
-      let productImgSrc = item.image || item.imageUrl || item.screenshotUrl || ''; 
+    const itemsHtml = (items || []).map(item => {
+      let productImgSrc = item.image || item.imageUrl || ''; 
       
       if (productImgSrc && !productImgSrc.startsWith('http') && !productImgSrc.startsWith('data:image')) {
         const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
@@ -113,15 +115,15 @@ const sendOrderEmailNotifications = async (order, imageAttachmentPath = null) =>
         <table style="width: 100%; font-size: 13px; line-height: 1.6;">
           <tr>
             <td style="width: 120px; font-weight: bold; color: #666;">Customer Name:</td>
-            <td>${customerDetails.firstName} ${customerDetails.lastName}</td>
+            <td>${customerDetails.firstName || ''} ${customerDetails.lastName || ''}</td>
           </tr>
           <tr>
             <td style="font-weight: bold; color: #666;">Phone Number:</td>
-            <td><a href="tel:${customerDetails.phone}" style="color: #000; font-weight: bold; text-decoration: none;">${customerDetails.phone}</a></td>
+            <td><a href="tel:${customerDetails.phone}" style="color: #000; font-weight: bold; text-decoration: none;">${customerDetails.phone || ''}</a></td>
           </tr>
           <tr>
             <td style="font-weight: bold; color: #666;">Email Address:</td>
-            <td>${customerDetails.email}</td>
+            <td>${customerDetails.email || ''}</td>
           </tr>
           <tr style="vertical-align: top;">
             <td style="font-weight: bold; color: #666; padding-top: 5px;">Shipping Address:</td>
@@ -137,7 +139,7 @@ const sendOrderEmailNotifications = async (order, imageAttachmentPath = null) =>
       </div>
     `;
 
-  
+    // Dispatch Order Success Confirmation Email to Customer
     await mailEngine.sendMail({
       from: `"RADI Archive Store" <${process.env.SYSTEM_EMAIL_USER || process.env.EMAIL_USER}>`,
       to: customerDetails.email,
@@ -145,7 +147,7 @@ const sendOrderEmailNotifications = async (order, imageAttachmentPath = null) =>
       html: `
         <div style="background-color: #fafafa; padding: 20px;">
           <p style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto 15px auto; font-size: 14px;">
-            Hello ${customerDetails.firstName},<br /><br />
+            Hello ${customerDetails.firstName || 'Client'},<br /><br />
             Your order has been placed successfully. Delivery cycles require approximately 2-3 weeks to clear local hubs.
           </p> 
           ${coreTemplate}
@@ -153,7 +155,7 @@ const sendOrderEmailNotifications = async (order, imageAttachmentPath = null) =>
       `
     });
 
-   
+    // Dispatch Real-time Dashboard Invoice to Fulfillment Admin Team
     await mailEngine.sendMail({
       from: `"Fulfillment Dispatch System" <${process.env.SYSTEM_EMAIL_USER || process.env.EMAIL_USER}>`,
       to: 'Mariammrradi@gmail.com',

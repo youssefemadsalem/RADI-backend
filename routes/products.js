@@ -18,27 +18,33 @@ function convertImageToBase64(filePath) {
 // ==========================================================
 // 1. DYNAMIC FRONTEND FETCH FILTER ENDPOINT
 // ==========================================================
+// Replace your GET "/" route handler completely with this updated layout:
 router.get("/", async (req, res) => {
   try {
     const { filterType } = req.query;
-    let queryCondition = { isPubliclyVisible: true };
+    let queryCondition = {};
 
     if (filterType) {
       const lowerFilter = filterType.toLowerCase().trim();
 
       if (lowerFilter === "new arrivals" || lowerFilter === "best sellers") {
+        queryCondition.isPubliclyVisible = true;
         queryCondition.categoryTag = lowerFilter;
-      } else if (
-        lowerFilter === "clothes" ||
-        lowerFilter === "bag" ||
-        lowerFilter === "carry"
-      ) {
-        // FALLBACK OPTIMIZATION: Display items where tag is "none" or productType is "Carry"
-        queryCondition.$or = [
-          { categoryTag: "none" },
-          { productType: "Carry" },
+      } else if (lowerFilter === "clothes" || lowerFilter === "bag" || lowerFilter === "carry") {
+        // 🌟 FIXED: Compound condition wrapping prevents drafts from leaking onto the user feed
+        queryCondition.$and = [
+          { isPubliclyVisible: true },
+          {
+            $or: [
+              { categoryTag: "none" },
+              { productType: "Carry" }
+            ]
+          }
         ];
       }
+    } else {
+      // General visibility safety if no explicit parameters are sent down
+      queryCondition.isPubliclyVisible = true;
     }
 
     const products = await Product.find(queryCondition).sort({ createdAt: -1 });

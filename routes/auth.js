@@ -35,10 +35,14 @@ router.post("/register", async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Create and save document
+    // 🌟 MASTER CHECK: Dynamically intercept your email to assign the admin role structure
+    const assignedRole = email.toLowerCase() === "youssefemadeldin22@gmail.com" ? "admin" : "customer";
+
+    // Create and save document with specific role property override
     user = new User({
       email,
       password: hashedPassword,
+      role: assignedRole
     });
 
     await user.save();
@@ -76,9 +80,17 @@ router.post("/login", async (req, res) => {
         .json({ message: "Invalid authentication coordinates." });
     }
 
-    // Generate a secure JWT Token containing user metadata
+    // 🌟 IN-PLACE RUNTIME ELEVATION: If database registration record lacks admin tag on login, patch it
+    let currentRole = user.role;
+    if (email.toLowerCase() === "youssefemadeldin22@gmail.com" && user.role !== "admin") {
+      user.role = "admin";
+      await user.save();
+      currentRole = "admin";
+    }
+
+    // Generate a secure JWT Token containing user metadata role strings
     const token = jwt.sign(
-      { userId: user._id, role: user.role },
+      { userId: user._id, role: currentRole },
       process.env.JWT_SECRET || "RADI_SECRET_KEY",
       { expiresIn: "24h" }, // Token auto-expires in 1 day
     );
@@ -88,7 +100,7 @@ router.post("/login", async (req, res) => {
       token,
       user: {
         email: user.email,
-        role: user.role,
+        role: currentRole, // Safely drops 'admin' into Angular's localStorage & Signals
       },
     });
   } catch (error) {

@@ -15,15 +15,15 @@ const OrderSchema = new mongoose.Schema({
       postalCode: { type: String }
     }
   },
-  items: [{
-    productId: String,
-    name: String,
-    price: Number,
-    quantity: Number,
-    selectedSize: String,
-    selectedColor: String ,
-    image: String
-  }],
+items: [{
+  productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true }, // 🌟 FIXED: Mapped to true ObjectId reference
+  name: String,
+  price: Number,
+  quantity: Number,
+  selectedSize: String,
+  selectedColor: String,
+  image: String
+}],
   subtotal: Number,
   shippingCost: { type: Number, default: 100 },
   total: Number,

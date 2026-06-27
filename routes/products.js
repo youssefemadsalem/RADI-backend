@@ -2,9 +2,27 @@ const express = require("express");
 const router = express.Router();
 const path = require("path");
 const fs = require("fs");
+const multer = require("multer");
 const Product = require("../models/Product");
 
-// Helper function to read from your absolute Windows local path and convert to Base64
+// ==========================================================
+// CONFIGURATION: MULTER FOR HIGH-RES AD-HOC MEDIA UPLOADS
+// ==========================================================
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = "./uploads/products";
+    if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    cb(null, "prod-" + Date.now() + path.extname(file.originalname));
+  },
+});
+const upload = multer({ storage: storage });
+
+// ==========================================================
+// CONFIGURATION: LOCAL BASE64 CONVERSION FOR SEEDING
+// ==========================================================
 function convertImageToBase64(filePath) {
   try {
     const fileBuffer = fs.readFileSync(filePath);
@@ -16,9 +34,8 @@ function convertImageToBase64(filePath) {
 }
 
 // ==========================================================
-// 1. DYNAMIC FRONTEND FETCH FILTER ENDPOINT
+// 1. DYNAMIC FRONTEND FETCH FILTER ENDPOINT (Customer View)
 // ==========================================================
-// Replace your GET "/" route handler completely with this updated layout:
 router.get("/", async (req, res) => {
   try {
     const { filterType } = req.query;
@@ -31,7 +48,6 @@ router.get("/", async (req, res) => {
         queryCondition.isPubliclyVisible = true;
         queryCondition.categoryTag = lowerFilter;
       } else if (lowerFilter === "clothes" || lowerFilter === "bag" || lowerFilter === "carry") {
-        // 🌟 FIXED: Compound condition wrapping prevents drafts from leaking onto the user feed
         queryCondition.$and = [
           { isPubliclyVisible: true },
           {
@@ -43,7 +59,6 @@ router.get("/", async (req, res) => {
         ];
       }
     } else {
-      // General visibility safety if no explicit parameters are sent down
       queryCondition.isPubliclyVisible = true;
     }
 
@@ -59,11 +74,69 @@ router.get("/", async (req, res) => {
 });
 
 // ==========================================================
-// 🌟 2. NEWLY ADDED: FETCH SINGLE PRODUCT DETAILS BY ID
+// 2. ADMIN INVENTORY DASHBOARD METRICS PIPELINE (image_479cff.png)
+// ==========================================================
+router.get("/inventory", async (req, res) => {
+  try {
+    const products = await Product.find().sort({ createdAt: -1 });
+
+    let totalStockCount = 0;
+    let outOfStockCount = 0;
+    const uniqueCategories = new Set();
+    
+    const now = new Date();
+    const firstDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    let newProductsThisMonthCount = 0;
+
+    const formattedProductsList = products.map((product) => {
+      const stock = product.currentInventory || 0;
+      totalStockCount += stock;
+      
+      if (stock === 0) outOfStockCount++;
+      
+      if (product.categoryTag) uniqueCategories.add(product.categoryTag.toLowerCase().trim());
+      if (product.createdAt >= firstDayOfCurrentMonth) newProductsThisMonthCount++;
+
+      // Compute status flags explicitly matching luxury image guidelines
+      let computedStatus = "AVAILABLE";
+      if (stock === 0) {
+        computedStatus = "SOLD OUT";
+      } else if (stock <= 5) {
+        computedStatus = "LOW STOCK";
+      }
+
+      return {
+        id: product._id,
+        name: product.name,
+        sku: product.sku || `RD-SKU-${Math.floor(1000 + Math.random() * 9000)}`,
+        category: product.categoryTag || "Unassigned",
+        price: product.price,
+        stock: stock,
+        status: computedStatus,
+        // Fallback checks to display either a Base64 string or an uploaded path reference
+        image: product.images?.[0] || product.image || null,
+      };
+    });
+
+    res.json({
+      summaryMetrics: {
+        totalStock: totalStockCount,
+        outOfStock: outOfStockCount,
+        totalCategories: uniqueCategories.size || 1,
+        newThisMonth: `+${newProductsThisMonthCount}`,
+      },
+      products: formattedProductsList,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Inventory metrics pipeline blocked", error: error.message });
+  }
+});
+
+// ==========================================================
+// 3. FETCH SINGLE PRODUCT DETAILS BY ID
 // ==========================================================
 router.get("/:id", async (req, res) => {
   try {
-    // Queries MongoDB for a single document matching the dynamic hex string ID
     const product = await Product.findById(req.params.id);
 
     if (!product) {
@@ -75,7 +148,6 @@ router.get("/:id", async (req, res) => {
 
     res.json(product);
   } catch (error) {
-    // Gracefully handle malformed hex tokens or casting errors
     if (error.kind === "ObjectId") {
       return res.status(400).json({
         success: false,
@@ -92,14 +164,58 @@ router.get("/:id", async (req, res) => {
 });
 
 // ==========================================================
-// 3. AUTOMATED 9-IMAGE SEEDING ENDPOINT
+// 4. CREATE NEW PRODUCT HANDLER (image_479d5a.png)
+// ==========================================================
+router.post("/create-new", upload.array("mediaAssets", 5), async (req, res) => {
+  try {
+    const { 
+      name, 
+      category, 
+      collection, 
+      description, 
+      retailPrice, 
+      initialInventory, 
+      sku,
+      primaryColors,     
+      materials,         
+      isPubliclyVisible 
+    } = req.body;
+
+    // Normalizing media files into structural storage paths
+    const uploadedImagesPaths = req.files ? req.files.map(f => f.path.replace(/\\/g, "/")) : [];
+
+    const newlyMintedProduct = new Product({
+      name,
+      categoryTag: category,
+      collectionTag: collection,
+      description,
+      price: parseFloat(retailPrice || 0),
+      initialInventory: parseInt(initialInventory || 0, 10),
+      currentInventory: parseInt(initialInventory || 0, 10), // Matching starting parameters
+      sku,
+      colors: typeof primaryColors === "string" ? JSON.parse(primaryColors) : primaryColors,
+      materials: typeof materials === "string" ? JSON.parse(materials) : materials,
+      sizes: ["OS"], // Defaulting size mapping configuration
+      isPubliclyVisible: isPubliclyVisible === "true" || isPubliclyVisible === true,
+      images: uploadedImagesPaths
+    });
+
+    const savedProduct = await newlyMintedProduct.save();
+    res.status(201).json({ success: true, productId: savedProduct._id });
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed adding product variant node", error: error.message });
+  }
+});
+
+// ==========================================================
+// 5. AUTOMATED LOCAL STUDIO BASE64 SEEDING ENDPOINT
 // ==========================================================
 router.post("/seed", async (req, res) => {
   try {
     await Product.deleteMany({});
 
-    const targetFolder =
-      "C:\\Users\\COMPUMARTS\\Desktop\\RADI\\radi material\\white studio";
+    const targetFolder = "C:\\Users\\COMPUMARTS\\Desktop\\RADI\\radi material\\white studio";
 
     const categories = ["new arrivals", "best sellers", "none"];
     const materialOptions = [
@@ -113,14 +229,8 @@ router.post("/seed", async (req, res) => {
       ["Ribbed Knit Cotton-Wool Blend"],
     ];
     const colorOptions = [
-      "#DC2626",
-      "#171717",
-      "#78350F",
-      "#4B5563",
-      "#09090b",
-      "#059669",
-      "#7C3AED",
-      "#A7F3D0",
+      "#DC2626", "#171717", "#78350F", "#4B5563",
+      "#09090b", "#059669", "#7C3AED", "#A7F3D0",
     ];
     const basePrices = [135, 150, 160, 175, 185, 190, 210];
 
@@ -129,7 +239,7 @@ router.post("/seed", async (req, res) => {
       .filter(
         (file) =>
           file.toLowerCase().endsWith(".jpg") ||
-          file.toLowerCase().endsWith(".jpeg"),
+          file.toLowerCase().endsWith(".jpeg")
       )
       .sort((a, b) => parseInt(a) - parseInt(b));
 

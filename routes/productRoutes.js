@@ -120,4 +120,9 @@ router.get("/:id", async (req, res) => {
 // =========================================================================
 router.post("/create-new", uploadMiddleware.array("images", 5), productController.createProduct);
 
+// i added these routes so the frontend can hit the new controller functions we just made
+router.put("/edit/:id", uploadMiddleware.array("images", 5), productController.updateProduct);
+router.delete("/delete/:id", productController.deleteProduct);
+
+
 module.exports = router;

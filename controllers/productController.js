@@ -56,3 +56,46 @@ exports.createProduct = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+// i am adding a delete function to completely remove the item from the database
+exports.deleteProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deletedProduct = await Product.findByIdAndDelete(id);
+    
+    if (!deletedProduct) {
+      return res.status(404).json({ success: false, message: "product not found" });
+    }
+    
+    return res.status(200).json({ success: true, message: "product deleted successfully" });
+  } catch (error) {
+    console.error("error deleting product:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// this function handles updating the text fields. if you want to handle new image uploads during edit, 
+// you would process req.files here similar to the create function. for now it updates the basic details.
+exports.updateProduct = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    // mapping currentInventory to match the initial inventory if they update the stock number manually
+    if (updateData.initialInventory) {
+      updateData.currentInventory = Number(updateData.initialInventory);
+    }
+    
+    const updatedProduct = await Product.findByIdAndUpdate(id, updateData, { new: true });
+    
+    if (!updatedProduct) {
+      return res.status(404).json({ success: false, message: "product not found" });
+    }
+    
+    return res.status(200).json({ success: true, data: updatedProduct });
+  } catch (error) {
+    console.error("error updating product:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};

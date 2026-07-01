@@ -15,17 +15,22 @@ const OrderSchema = new mongoose.Schema({
       postalCode: { type: String }
     }
   },
-items: [{
-  productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true }, // 🌟 FIXED: Mapped to true ObjectId reference
-  name: String,
-  price: Number,
-  quantity: Number,
-  selectedSize: String,
-  selectedColor: String,
-  image: String
-}],
+  items: [{
+    productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
+    name: String,
+    price: Number,
+    quantity: Number,
+    selectedSize: String,
+    selectedColor: String,
+    image: String
+  }],
   subtotal: Number,
   shippingCost: { type: Number, default: 100 },
+  
+ 
+  couponCode: { type: String, default: null },
+  discountAmount: { type: Number, default: 0 },
+  
   total: Number,
   paymentMethod: { type: String, enum: ['COD', 'INSTAPAY'], required: true },
   screenshotUrl: { type: String, default: null },

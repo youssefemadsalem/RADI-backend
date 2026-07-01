@@ -7,7 +7,6 @@ const Order = require('../models/Order');
 const Product = require('../models/Product'); 
 const { sendOrderEmailNotifications } = require('../utils/mailer');
 
-// Initialize the Multer disk storage system engine
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadPath = './uploads/screenshots';
@@ -21,38 +20,55 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// ==========================================
-// ORDER CREATION ROUTE
-// ==========================================
 router.post('/create', upload.single('screenshot'), async (req, res) => {
   try {
     const { customerDetails, items, subtotal, shippingCost, total, paymentMethod } = req.body;
-    const generatedOrderCode = `RAD-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-    const screenshotUrlPath = req.file ? req.file.path : null;
+    
+    const parsedCustomerDetails = customerDetails ? JSON.parse(customerDetails) : {};
+    const couponCode = parsedCustomerDetails.couponCode || req.body.couponCode || null;
+    const discountAmount = parsedCustomerDetails.discountAmount || req.body.discountAmount || 0;
 
-    // 🌟 FIXED: Normalize frontend identifiers (id / _id) on the fly to fulfill 'productId' schema demands
     const parsedItems = JSON.parse(items || '[]').map(item => ({
       ...item,
       productId: item.productId || item.id || item._id
     }));
 
-    // Safe transactional inventory deduction pass loop
+    // i added this validation loop to check real database stock before we create the order document
+    // if any item is out of stock, it stops the whole checkout process and sends an error back
+    for (const item of parsedItems) {
+      if (item.productId) {
+        const productCheck = await Product.findById(item.productId);
+        if (!productCheck || productCheck.currentInventory < item.quantity) {
+          return res.status(400).json({ 
+            success: false, 
+            message: `Sorry, ${item.name || 'an item'} is out of stock or does not have enough quantity.` 
+          });
+        }
+      }
+    }
+
+    // if it passes the check above, we can safely deduct the stock now
     for (const item of parsedItems) {
       if (item.productId) {
         await Product.findByIdAndUpdate(
           item.productId,
-          { $inc: { currentInventory: -Math.abs(item.quantity || 1) } },
-          { returnDocument: 'after' } // 🌟 FIXED: Mongoose standard syntax update to clear terminal deprecation warnings
+          { $inc: { currentInventory: -Math.abs(item.quantity) } },
+          { returnDocument: 'after' } 
         );
       }
     }
 
+    const generatedOrderCode = `RAD-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+    const screenshotUrlPath = req.file ? req.file.path : null;
+
     const freshCreatedOrder = new Order({
       orderCode: generatedOrderCode,
-      customerDetails: customerDetails ? JSON.parse(customerDetails) : {},
+      customerDetails: parsedCustomerDetails,
       items: parsedItems, 
       subtotal: parseFloat(subtotal || 0),
       shippingCost: parseFloat(shippingCost || 100),
+      couponCode: couponCode,
+      discountAmount: parseFloat(discountAmount || 0),
       total: parseFloat(total || 0),
       paymentMethod,
       screenshotUrl: screenshotUrlPath
@@ -60,18 +76,17 @@ router.post('/create', upload.single('screenshot'), async (req, res) => {
 
     const savedDatabaseRecord = await freshCreatedOrder.save();
     
-    // Safe asynchronous background execution loop worker prevents mail thread failures from triggering 500 errors
     process.nextTick(async () => {
       try {
         await sendOrderEmailNotifications(savedDatabaseRecord, screenshotUrlPath);
       } catch (mailError) {
-        console.error('[SMTP Background Thread Exception] Notification pipeline choked safely:', mailError.message);
+        console.error('mail fail in background:', mailError.message);
       }
     });
 
     return res.status(201).json({ success: true, orderCode: generatedOrderCode });
   } catch (error) {
-    console.error("❌ Checkout Controller Exception Intercepted:", error.message);
+    console.error("checkout failed:", error.message);
     return res.status(500).json({ success: false, message: error.message });
   }
 });

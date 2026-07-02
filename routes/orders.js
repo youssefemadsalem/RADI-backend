@@ -91,4 +91,44 @@ router.post('/create', upload.single('screenshot'), async (req, res) => {
   }
 });
 
+
+
+
+
+router.get('/', async (req, res) => {
+  try {
+    // sorting by createdAt -1 ensures the newest orders show up at the top of the table
+    const orders = await Order.find().sort({ createdAt: -1 });
+    return res.status(200).json({ success: true, data: orders });
+  } catch (error) {
+    console.error("failed to fetch orders:", error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// update the status of a specific order
+router.put('/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body; 
+    
+    // updates the document and returns the newly updated version
+    const updatedOrder = await Order.findByIdAndUpdate(
+      id, 
+      { status: status }, 
+      { new: true }
+    );
+
+    if (!updatedOrder) {
+      return res.status(404).json({ success: false, message: "order not found" });
+    }
+
+    return res.status(200).json({ success: true, data: updatedOrder });
+  } catch (error) {
+    console.error("failed to update order status:", error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+
 module.exports = router;

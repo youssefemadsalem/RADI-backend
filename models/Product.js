@@ -22,7 +22,8 @@ const ProductSchema = new mongoose.Schema(
       enum: ["new arrivals", "best sellers", "none"],
       default: "none",
     },
-
+height: { type: String, default: "" },
+  width: { type: String, default: "" },
     materials: [{ type: String }],
     colors: [{ type: String }],
     sizes: [{ type: String }],

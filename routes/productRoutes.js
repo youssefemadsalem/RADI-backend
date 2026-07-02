@@ -13,12 +13,8 @@ router.get("/inventory", async (req, res) => {
   try {
     const products = await Product.find({}).sort({ createdAt: -1 });
 
-    // total stock now counts what is actually left on shelves using currentInventory
     const totalStock = products.reduce((acc, prod) => acc + (prod.currentInventory || 0), 0);
-    
-    // items are checked against currentInventory to see if they are completely sold out
     const outOfStock = products.filter(prod => (prod.currentInventory || 0) <= 0).length;
-    
     const uniqueCategories = [...new Set(products.map(prod => prod.productType))].filter(Boolean);
     const totalCategories = uniqueCategories.length;
 
@@ -30,7 +26,6 @@ router.get("/inventory", async (req, res) => {
     }).length;
 
     const formattedProducts = products.map(prod => {
-      // dynamic badges mapping depends directly on the updated remaining stock level
       let status = "AVAILABLE";
       if ((prod.currentInventory || 0) <= 0) status = "SOLD OUT";
       else if ((prod.currentInventory || 0) < 5) status = "LOW STOCK";
@@ -41,7 +36,6 @@ router.get("/inventory", async (req, res) => {
         sku: prod.sku,
         category: prod.productType || "Unassigned",
         price: prod.price,
-        // sending currentInventory instead of the static initial setup value
         stock: prod.currentInventory || 0,
         status: status,
         image: prod.images && prod.images.length > 0 ? prod.images[0] : null
@@ -116,13 +110,10 @@ router.get("/:id", async (req, res) => {
 });
 
 // =========================================================================
-// 4. PRODUCT INGESTION CREATION PIPELINE (POST /api/products/create-new)
+// 4. PRODUCT INGESTION, MODIFICATION & REMOVAL PIPELINES
 // =========================================================================
 router.post("/create-new", uploadMiddleware.array("images", 5), productController.createProduct);
-
-// i added these routes so the frontend can hit the new controller functions we just made
 router.put("/edit/:id", uploadMiddleware.array("images", 5), productController.updateProduct);
 router.delete("/delete/:id", productController.deleteProduct);
-
 
 module.exports = router;
